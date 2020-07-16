@@ -14,9 +14,9 @@ namespace DamageOnMaps
         public string Tank { get; set; }
         public DateTime Time { get; set; }
         public string Map { get; set; }
-        public int TankLevel { get; set; }
         public int Damage { get; set; }
         public string Mode { get; set; }
+        public List<string> Vehicles { get; set; } = new List<string>();
 
         public ReplayInfo(string path)
         {
@@ -24,11 +24,35 @@ namespace DamageOnMaps
             ParseFileName(path);
         }
 
-        private const string ttx = "\"damageDealt\": ";
-        private const string gameplay = "\"gameplayID\": ";
+        private const string damageDealt = "\"damageDealt\": ";
+        private const string gameplayID = "\"gameplayID\": ";
         private const string battleType = "\"battleType\": ";
+        private const string vehicleType = "\"vehicleType\": ";
         private static readonly char[] chararray = "_".ToCharArray();
         private static Encoding ANSI = Encoding.GetEncoding(1252);
+
+        public string GetNextString(int buffer, string jsontext, string current, int startindex)
+        {
+            var damageindx = jsontext.IndexOf(current, startindex);
+            if (damageindx == -1) return null;
+            else
+            {
+                var i2 = jsontext.Substring(damageindx, buffer + current.Length);
+                return i2.Substring(current.Length, i2.IndexOf(',') - current.Length);
+            };
+        }
+
+        public string GetNextString(int buffer, string jsontext, string current)
+        {
+            var damageindx = jsontext.IndexOf(current);
+            if (damageindx == -1) return null;
+            else
+            {
+                var i2 = jsontext.Substring(damageindx, buffer + current.Length);
+                return i2.Substring(current.Length, i2.IndexOf(',') - current.Length);
+            };
+        }
+
         public void ParseFileName(string path)
         {
             var filename = Path.GetFileNameWithoutExtension(path);
@@ -51,28 +75,45 @@ namespace DamageOnMaps
                     json = jsonbuilder.ToString();
                 }
             }
-            var damageindx = json.IndexOf(ttx);
-            if (damageindx == -1) Damage = -1;
-            else
+
             {
-                var i2 = json.Substring(damageindx, 12 + ttx.Length);
-                Damage = int.Parse(i2.Substring(ttx.Length, i2.IndexOf(',') - ttx.Length));
-            };
-            var gameplayindx = json.IndexOf(gameplay);
-            if (gameplayindx == -1) Mode = null;
-            else
-            {
-                if (gameplayindx == -1) Mode = null;
-                else
+                var damageindex = 0;
+                do
                 {
-                    var i2 = json.Substring(gameplayindx, 50 + gameplay.Length + battleType.Length);
-                    var part1 = i2.Substring(gameplay.Length, i2.IndexOf(',') - gameplay.Length).Replace("\"", "");
-                    var battleindx = i2.IndexOf(battleType);
-                    var i3 = i2.Substring(battleindx, 10 + battleType.Length);
-                    var part2 = i3.Substring(battleType.Length, i3.IndexOf(',') - battleType.Length).Replace("\"", "");
-                    Mode = TryReplaceMode($"{part1}_{part2}");
+                    damageindex = json.IndexOf(damageDealt, damageindex + damageDealt.Length);
+                    if (damageindex == -1)
+                    {
+                        Damage = -1;
+                        break;
+                    }
+                    var damagestr = GetNextString(12, json, damageDealt, damageindex);
+                    if (damagestr.Contains("}")) continue;
+                    if (damagestr == null) Damage = -1; else Damage = int.Parse(damagestr.Replace("\"", ""));
+                    break;
                 }
+                while (damageindex != -1) ;
             }
+
+            {
+                var gameplayidstr = GetNextString(24, json, gameplayID);
+                var battletypestr = GetNextString(12, json, battleType);
+                if (gameplayID == null || battleType == null) throw new Exception();
+                Mode = TryReplaceMode($"{gameplayidstr.Replace("\"", "")}_{battletypestr}");
+            }
+
+            var indx = 0;
+            do
+            {
+                indx = json.IndexOf(vehicleType, indx + vehicleType.Length);
+                if (indx == -1) break;
+                Vehicles.Add(ParseTankNameFronJSON(GetNextString(48, json, vehicleType, indx)).Replace("\"", ""));
+            }
+            while (indx != -1);
+        }
+
+        public static string ParseTankNameFronJSON(string tankname)
+        {
+            return tankname.Substring(tankname.IndexOf(":") + 1);
         }
 
         public static Dictionary<string, string> MapLocal = new Dictionary<string, string>();
@@ -90,7 +131,7 @@ namespace DamageOnMaps
         public bool IsLegal()
         {
             if (Damage == -1) return false;
-            if (Mode == "ctf_9") return false;
+            if (Mode == ModeLocal["ctf_9"] && !Tank.Contains("Sturmtiger")) return false;
             return true;
         }
 
@@ -141,7 +182,7 @@ namespace DamageOnMaps
             MapLocal.Add("209-wg-epic-suburbia", "Крафтверк");
 
             ModeLocal.Add("epic_27", "\"Линия фронта\"");
-            ModeLocal.Add("domination_32", "\"Битва блогеров 2020\"");
+            ModeLocal.Add("domination_32", "\"Битва блогеров (Схватка)\"");
             ModeLocal.Add("ctf_22", "Ранговый бой");
 
             ModeLocal.Add("ctf_1", "Случайный бой");
@@ -152,6 +193,7 @@ namespace DamageOnMaps
             ModeLocal.Add("assault2_2", "Тренировочный бой / Штурм");
 
             ModeLocal.Add("ctf30x30_25", "Генеральное сражение");
+            ModeLocal.Add("ctf_9", "10 на 10");
         }
     }
 
@@ -179,7 +221,6 @@ namespace DamageOnMaps
             var errors = 0;
             for (var i = 0; i < files.Length; i++)
             {
-                Console.Title = $"{i - errors, 6} / {files.Length - errors, -6} ({(double)i/files.Length:p})";
                 try
                 {
                     var ri = new ReplayInfo(files[i]);
@@ -193,91 +234,127 @@ namespace DamageOnMaps
                 {
                     errors += 1;
                 }
+                Console.Title = $"{i - errors,6} / {files.Length - errors,-6} ({(double)i / files.Length:p})";
             }
         }
-    }
 
-    public class ReportInformation : IEnumerable<ModeContainer>
-    {
-        public List<ModeContainer> ModeContainers { get; set; }
-        public int BattlesCount => ModeContainers.Sum(x => x.BattlesCount);
-        public ReportInformation(List<ModeContainer> mods)
+        public List<(string, int)> GetMostPopularTanks()
         {
-            ModeContainers = mods;
-            ModeContainers.Sort((x, y) => string.Compare(x.ModeName, y.ModeName));
+            var lst = Replays.SelectMany(x => x.Vehicles).GroupBy(x => x).Select(x => (x.Key, x.Count())).ToList();
+            lst.Sort((x, y) => y.Item2 - x.Item2);
+            return lst;
         }
 
-        public IEnumerator<ModeContainer> GetEnumerator()
+        public ReportInformation GetReportOfModeMapsBattles()
         {
-            return ModeContainers.GetEnumerator();
+            return new ReportInformation(Replays);
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        public class ReportInformation : IEnumerable<ModeContainer>
         {
-            return GetEnumerator();
-        }
-    }
+            public List<ModeContainer> ModeContainers { get; set; }
+            public int BattlesCount => ModeContainers.Sum(x => x.BattlesCount);
+            internal ReportInformation(List<ReplayInfo> replays)
+            {
+                ModeContainers = replays.GroupBy(x => x.Mode, (modename, map) => new ModeContainer(modename, map)).ToList();
+                ModeContainers.Sort((x, y) => string.Compare(x.ModeName, y.ModeName));
+            }
 
-    public class ModeContainer : IEnumerable<MapContainer>
-    {
-        public string ModeName { get; set; }
-        public List<MapContainer> MapContainers { get; set; }
-        public int BattlesCount => MapContainers.Sum(x => x.BattlesCount);
-        public ModeContainer(string modename, List<MapContainer> maps)
-        {
-            ModeName = modename;
-            MapContainers = maps;
-            MapContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
-        }
+            public IEnumerator<ModeContainer> GetEnumerator()
+            {
+                return ModeContainers.GetEnumerator();
+            }
 
-        public IEnumerator<MapContainer> GetEnumerator()
-        {
-            return MapContainers.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        public class ModeContainer : IEnumerable<MapContainer>
         {
-            return GetEnumerator();
+            public string ModeName { get; set; }
+            public List<MapContainer> MapContainers { get; set; }
+            public int BattlesCount => MapContainers.Sum(x => x.BattlesCount);
+            public ModeContainer(string modename, IEnumerable<ReplayInfo> maps)
+            {
+                ModeName = modename;
+                MapContainers = maps.GroupBy(x => x.Map, (mapname, tank) => new MapContainer(mapname, tank)).ToList();
+                MapContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+            }
+
+            public static int Compare(MapContainer left, MapContainer right)
+            {
+                var leftaverageoverall = left.AverageDamage * left.BattlesCount;
+                var rightaverageoverall = right.AverageDamage * right.BattlesCount;
+                if (leftaverageoverall == rightaverageoverall) return 0;
+                if (leftaverageoverall > rightaverageoverall) return 1;
+                if (leftaverageoverall < rightaverageoverall) return -1;
+                throw new Exception();
+            }
+
+            public IEnumerator<MapContainer> GetEnumerator()
+            {
+                return MapContainers.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
         }
-    }
 
-    public class MapContainer : IEnumerable<TankContainer>
-    {
-        public string MapName { get; set; }
-        public List<TankContainer> TanksContainers { get; set; }
-        public int BattlesCount => TanksContainers.Sum(x => x.BattlesCount);
-        public int AverageDamage => (int)TanksContainers.Average(x => x.AverageDamage);
-        public MapContainer(string mapname, List<TankContainer> tanks)
+        public class MapContainer : IEnumerable<TankContainer>
         {
-            MapName = mapname;
-            TanksContainers = tanks;
-            TanksContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+            public string MapName { get; set; }
+            public List<TankContainer> TanksContainers { get; set; }
+            public int BattlesCount => TanksContainers.Sum(x => x.BattlesCount);
+            public int AverageDamage
+            {
+                get
+                {
+                    var battles = 0;
+                    long alldamage = 0;
+                    foreach (var tankinfo in TanksContainers)
+                    {
+                        battles += tankinfo.BattlesCount;
+                        alldamage += tankinfo.AverageDamage * tankinfo.BattlesCount;
+                    }
+                    return (int)(alldamage / (double)battles);
+                }
+            }
+            public MapContainer(string mapname, IEnumerable<ReplayInfo> tanks)
+            {
+                MapName = mapname;
+                TanksContainers = tanks.GroupBy(x => x.Tank, (tankname, replays) => new TankContainer(tankname, replays)).ToList();
+                TanksContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+            }
+
+            public IEnumerator<TankContainer> GetEnumerator()
+            {
+                return TanksContainers.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
+            }
         }
 
-        public IEnumerator<TankContainer> GetEnumerator()
+        public class TankContainer
         {
-            return TanksContainers.GetEnumerator();
-        }
+            public string TankName { get; set; }
+            public int BattlesCount { get; set; }
 
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-    }
+            //params:
+            public int AverageDamage { get; set; }
 
-    public class TankContainer
-    {
-        public string TankName { get; set; }
-        public int BattlesCount { get; set; }
-
-        //params:
-        public int AverageDamage { get; set; }
-
-        public TankContainer(string tankname, IEnumerable<ReplayInfo> replays)
-        {
-            TankName = tankname;
-            AverageDamage = (int)replays.Average(x => x.Damage);
-            BattlesCount = replays.Count();
+            public TankContainer(string tankname, IEnumerable<ReplayInfo> replays)
+            {
+                TankName = tankname;
+                AverageDamage = (int)replays.Average(x => x.Damage);
+                BattlesCount = replays.Count();
+            }
         }
     }
 
@@ -313,10 +390,15 @@ namespace DamageOnMaps
             return (int)Math.Round((double)overalldamage / battles);
         }
 
-        public static string GetTankName(this TankContainer str)
+        public static string GetTankName(this ReplayList.TankContainer str)
         {
             var iof = str.TankName.IndexOf("_");
             return str.TankName.Substring(iof + 1).Replace("_", " ");
+        }
+        public static string GetTankName(this string str)
+        {
+            var iof = str.IndexOf("_");
+            return str.Substring(iof + 1).Replace("_", " ");
         }
 
         static void Main(string[] args)
@@ -324,38 +406,35 @@ namespace DamageOnMaps
             Console.Title = "DamageOnMaps by Alexandr Kotov";
             Console.WriteLine("Эта программа создаёт отчёт по сыгранным реплеям");
             Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().ManifestModule.FullyQualifiedName);
-            var list = new ReplayList();
-#if DEBUG
-            //режимы игры
-            var xxxx = list.Replays.GroupBy(x => x.Mode).Select(x => (x.Key, x.Count()));
-            foreach (var x in xxxx)
+            var AllReplays = new ReplayList();
+            if (AllReplays.Replays.Count > 0)
             {
-                Console.WriteLine($"   {x.Key,25}  =  {x.Item2}");
-            }
-            Console.ReadLine();
-#endif
-            if (list.Replays.Count > 0)
-            {
-                var reportInformation = new ReportInformation(list.Replays.GroupBy(x => x.Mode,
-                    (modename, map) => new ModeContainer(modename, map.GroupBy(x => x.Map,
-                    (mapname, tank) => new MapContainer(mapname, tank.GroupBy(x => x.Tank,
-                    (tankname, rep) => new TankContainer(tankname, rep))
-                    .ToList())).ToList())).ToList());
-
-                var x0 = new ReportInformation(list.Replays.GroupBy(x => x.Mode).Select(mode =>
-                    new ModeContainer(mode.Key, mode.GroupBy(x => x.Map).Select(map =>
-                    new MapContainer(map.Key, map.GroupBy(x => x.Tank).Select(tank =>
-                    new TankContainer(tank.Key, tank.ToList())).ToList())).ToList())).ToList());
-                
                 var sb = new StringBuilder();
                 sb.AppendLine("(c)      DamageOnMaps by Alexandr Kotov 2020");
                 sb.AppendLine();
                 sb.AppendLine("==========   Отчёт  по  реплеям   ==========");
                 sb.AppendLine("============================================");
+                sb.AppendLine();
+
+                var tankInformation = AllReplays.GetMostPopularTanks();
+                sb.AppendLine("==>  Самые  частые  танки  в  реплеях    <==");
+                sb.AppendLine();
+                sb.AppendLine($"  │  {"Танк", -50} │ {"Раз встретился", 20} │");
+                sb.AppendLine($"──┼──{new string('─', 50)}─┼─{new string('─', 20)}─┼──");
+                foreach (var x in tankInformation)
+                {
+                    sb.AppendLine($"  │  {x.Item1.GetTankName(),-50} │ {x.Item2,20} │");
+                }
+                sb.AppendLine();
+                sb.AppendLine("============================================");
+                sb.AppendLine();
+                sb.AppendLine();
+
+                var reportInformation = AllReplays.GetReportOfModeMapsBattles();
+                sb.AppendLine("=============>   По режимам   <=============");
                 sb.AppendLine($"  Общее количество боёв в отчёте: {reportInformation.BattlesCount}");
                 sb.AppendLine("============================================");
                 sb.AppendLine();
-
                 foreach (var mode in reportInformation)
                 {
                     sb.AppendLine($"===> Режим {mode.ModeName} ({mode.BattlesCount})");
@@ -373,6 +452,7 @@ namespace DamageOnMaps
                     }
                     sb.AppendLine($"<{new string('=', 20)}");
                 }
+                sb.AppendLine("============================================");
                 File.WriteAllText("replayinfo.txt", sb.ToString(), Encoding.UTF8);
             }
             else
