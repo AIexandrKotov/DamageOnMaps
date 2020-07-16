@@ -135,15 +135,23 @@ namespace DamageOnMaps
             MapLocal.Add("101-dday", "Оверлорд");
             MapLocal.Add("03-campania-big", "Провинция");
             MapLocal.Add("105-germany", "Берлин");
+            MapLocal.Add("60-asia-miao", "Жемчужная река");
+
+            MapLocal.Add("208-bf-epic-normandy", "Нормандия");
+            MapLocal.Add("209-wg-epic-suburbia", "Крафтверк");
 
             ModeLocal.Add("epic_27", "\"Линия фронта\"");
             ModeLocal.Add("domination_32", "\"Битва блогеров 2020\"");
             ModeLocal.Add("ctf_22", "Ранговый бой");
-            ModeLocal.Add("ctf_2", "Тренировочный бой");
 
             ModeLocal.Add("ctf_1", "Случайный бой");
             ModeLocal.Add("domination_1", "Случайный бой / Встречный");
             ModeLocal.Add("assault_1", "Случайный бой / Штурм");
+
+            ModeLocal.Add("ctf_2", "Тренировочный бой");
+            ModeLocal.Add("assault2_2", "Тренировочный бой / Штурм");
+
+            ModeLocal.Add("ctf30x30_25", "Генеральное сражение");
         }
     }
 
