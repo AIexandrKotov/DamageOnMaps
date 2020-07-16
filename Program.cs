@@ -101,12 +101,20 @@ namespace DamageOnMaps
                 Mode = TryReplaceMode($"{gameplayidstr.Replace("\"", "")}_{battletypestr}");
             }
 
+            var owntankcount = 0;
+
             var indx = 0;
             do
             {
                 indx = json.IndexOf(vehicleType, indx + vehicleType.Length);
                 if (indx == -1) break;
-                Vehicles.Add(ParseTankNameFronJSON(GetNextString(48, json, vehicleType, indx)).Replace("\"", ""));
+                var tankname = ParseTankNameFronJSON(GetNextString(48, json, vehicleType, indx)).Replace("\"", "");
+                if (Tank == tankname)
+                {
+                    owntankcount++;
+                    if (owntankcount > 1) Vehicles.Add(tankname);
+                }
+                else Vehicles.Add(tankname);
             }
             while (indx != -1);
         }
