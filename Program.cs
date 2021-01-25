@@ -163,7 +163,7 @@ namespace DamageOnMaps
 
         public bool IsLegal()
         {
-            if (Damage == -1) return false;
+            if (!ReplayList.CollectReplaysWithoutDamage && Damage == -1) return false;
             if (Mode == ModeLocal["ctf_9"] && !Tank.Contains("Sturmtiger")) return false;
             return true;
         }
