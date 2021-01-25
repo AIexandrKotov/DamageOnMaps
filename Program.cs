@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Collections;
+using System.Reflection;
 
 namespace DamageOnMaps
 {
@@ -15,8 +16,10 @@ namespace DamageOnMaps
         public DateTime Time { get; set; }
         public string Map { get; set; }
         public int Damage { get; set; }
+        public string OrigMode { get; set; }
         public string Mode { get; set; }
         public List<string> Vehicles { get; set; } = new List<string>();
+        public int Artys { get; set; }
 
         public ReplayInfo(string path)
         {
@@ -27,7 +30,10 @@ namespace DamageOnMaps
         private const string damageDealt = "\"damageDealt\": ";
         private const string gameplayID = "\"gameplayID\": ";
         private const string battleType = "\"battleType\": ";
+        private const string gameplayID2 = "\"gameplayID\":";
+        private const string battleType2 = "\"battleType\":";
         private const string vehicleType = "\"vehicleType\": ";
+        private const string vehicleType2 = "\"vehicleType\":";
         private static readonly char[] chararray = "_".ToCharArray();
         private static Encoding ANSI = Encoding.GetEncoding(1252);
 
@@ -51,6 +57,13 @@ namespace DamageOnMaps
                 var i2 = jsontext.Substring(damageindx, buffer + current.Length);
                 return i2.Substring(current.Length, i2.IndexOf(',') - current.Length);
             };
+        }
+
+        public static int GetMaximumVehicles(string s)
+        {
+            if (s.Contains("30x30")) return 60;
+            if (s == "ctf_9") return 20;
+            return 30;
         }
 
         public void ParseFileName(string path)
@@ -96,27 +109,38 @@ namespace DamageOnMaps
 
             {
                 var gameplayidstr = GetNextString(24, json, gameplayID);
-                var battletypestr = GetNextString(12, json, battleType);
-                if (gameplayID == null || battleType == null) throw new Exception();
-                Mode = TryReplaceMode($"{gameplayidstr.Replace("\"", "")}_{battletypestr}");
+                var battletypestr = GetNextString(20, json, battleType);
+                if (gameplayidstr == null || battletypestr == null)
+                {
+                    gameplayidstr = GetNextString(24, json, gameplayID2);
+                    battletypestr = GetNextString(20, json, battleType2);
+                }
+                OrigMode = $"{gameplayidstr.Replace("\"", "")}_{battletypestr}";
+                Mode = TryReplaceMode(OrigMode);
             }
 
             var owntankcount = 0;
 
             var indx = 0;
+            var count = 0;
+            var maxcount = GetMaximumVehicles(OrigMode);
             do
             {
                 indx = json.IndexOf(vehicleType, indx + vehicleType.Length);
                 if (indx == -1) break;
-                var tankname = ParseTankNameFronJSON(GetNextString(48, json, vehicleType, indx)).Replace("\"", "");
+                var tankstr = GetNextString(48, json, vehicleType, indx);
+                if (tankstr == null) tankstr = GetNextString(48, json, vehicleType2, indx);
+                var tankname = ParseTankNameFronJSON(tankstr).Replace("\"", "");
                 if (Tank == tankname)
                 {
                     owntankcount++;
                     if (owntankcount > 1) Vehicles.Add(tankname);
                 }
                 else Vehicles.Add(tankname);
+                count++;
             }
-            while (indx != -1);
+            while (indx != -1 && count < maxcount);
+            Artys = Vehicles.Count(x => ArtysNames.Contains(x));
         }
 
         public static string ParseTankNameFronJSON(string tankname)
@@ -126,6 +150,7 @@ namespace DamageOnMaps
 
         public static Dictionary<string, string> MapLocal = new Dictionary<string, string>();
         public static Dictionary<string, string> ModeLocal = new Dictionary<string, string>();
+        public static List<string> ArtysNames = new List<string>();
         public static string TryReplaceMap(string that)
         {
             if (MapLocal.ContainsKey(that)) return MapLocal[that]; else return that;
@@ -145,46 +170,137 @@ namespace DamageOnMaps
 
         static ReplayInfo()
         {
+
+            using (var stream = Assembly.GetEntryAssembly().GetManifestResourceStream("DamageOnMaps.arts.txt"))
+            {
+                using (var artys = new StreamReader(stream))
+                {
+                    ArtysNames.AddRange(artys.ReadToEnd().Split(Environment.NewLine.ToArray(), StringSplitOptions.RemoveEmptyEntries));
+                }
+            }
+            
+
+            MapLocal.Add("01-karelia", "Карелия");
+            MapLocal.Add("02-malinovka", "Малиновка");
+            MapLocal.Add("03-campania-big", "Провинция");
+            MapLocal.Add("04-himmelsdorf", "Химмельсдорф");
+            MapLocal.Add("05-prohorovka", "Прохоровка");
+            MapLocal.Add("06-ensk", "Энск");
+            MapLocal.Add("07-lakeville", "Лассвилль");
+            MapLocal.Add("08-ruinberg", "Руинберг");
+
+            MapLocal.Add("10-hills", "Рудники");
+            MapLocal.Add("11-murovanka", "Мурованка");
+
+            MapLocal.Add("13-erlenberg", "Эрленберг");
+            MapLocal.Add("14-siegfried-line", "Линия Зигфрида");
+
+
+            MapLocal.Add("17-munchen", "Уайдпарк");
+            MapLocal.Add("18-cliff", "Утёс");
+            MapLocal.Add("19-monastery", "Монастырь");
+
+
+
+            MapLocal.Add("23-westfeld", "Вестфилд");
+
+
+
+
+            MapLocal.Add("28-desert", "Песчаная река");
+            MapLocal.Add("29-el-hallouf", "Эль-Халлуф");
+
+            MapLocal.Add("31-airfield", "Аэродром");
+
+            MapLocal.Add("33-fjord", "Фьорды");
+            MapLocal.Add("34-redshire", "Редшир");
+            MapLocal.Add("35-steppes", "Степи");
+            MapLocal.Add("36-fishing-bay", "Рыбацкая бухта");
+            MapLocal.Add("37-caucasus", "Перевал");
+            MapLocal.Add("38-mannerheim-line", "Линия маннергейма");
+
+
+
+            MapLocal.Add("42-north-america", "Порт");
+            MapLocal.Add("43-north-america", "Северо-запад");
             MapLocal.Add("44-north-america", "Лайв Окс");
             MapLocal.Add("45-north-america", "Хайвей");
-            MapLocal.Add("06-ensk", "Энск");
-            MapLocal.Add("35-steppes", "Степи");
-            MapLocal.Add("31-airfield", "Аэродром");
-            MapLocal.Add("04-himmelsdorf", "Химмельсдорф");
-            MapLocal.Add("08-ruinberg", "Руинберг");
-            MapLocal.Add("63-tundra", "Тундра");
-            MapLocal.Add("11-murovanka", "Мурованка");
-            MapLocal.Add("18-cliff", "Утёс");
-            MapLocal.Add("34-redshire", "Редшир");
-            MapLocal.Add("14-siegfried-line", "Линия Зигфрида");
-            MapLocal.Add("10-hills", "Рудники");
-            MapLocal.Add("19-monastery", "Монастырь");
-            MapLocal.Add("23-westfeld", "Вестфилд");
+
             MapLocal.Add("47-canada-a", "Тихий берег");
-            MapLocal.Add("02-malinovka", "Малиновка");
-            MapLocal.Add("36-fishing-bay", "Рыбацкая бухта");
-            MapLocal.Add("114-czech", "Промзона");
-            MapLocal.Add("83-kharkiv", "Харьков");
-            MapLocal.Add("07-lakeville", "Лассвилль");
-            MapLocal.Add("37-caucasus", "Перевал");
-            MapLocal.Add("115-sweden", "Штиль");
-            MapLocal.Add("01-karelia", "Карелия");
-            MapLocal.Add("13-erlenberg", "Эрленберг");
-            MapLocal.Add("29-el-hallouf", "Эль-Халлуф");
-            MapLocal.Add("95-lost-city-ctf", "Затеряный город");
-            MapLocal.Add("33-fjord", "Фьорды");
+
+
+
+
+
+
+
+
+
+
+
             MapLocal.Add("59-asia-great-wall", "Граница империи");
-            MapLocal.Add("05-prohorovka", "Прохоровка");
-            MapLocal.Add("28-desert", "Песчаная река");
-            MapLocal.Add("90-minsk", "Минск");
-            MapLocal.Add("38-mannerheim-line", "Линия маннергейма");
-            MapLocal.Add("99-poland", "Студзянки");
-            MapLocal.Add("112-eiffel-tower-ctf", "Париж");
-            MapLocal.Add("17-munchen", "Уайдпарк");
-            MapLocal.Add("101-dday", "Оверлорд");
-            MapLocal.Add("03-campania-big", "Провинция");
-            MapLocal.Add("105-germany", "Берлин");
             MapLocal.Add("60-asia-miao", "Жемчужная река");
+
+
+            MapLocal.Add("63-tundra", "Тундра");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            MapLocal.Add("83-kharkiv", "Харьков");
+            MapLocal.Add("84-winter", "Виндсторм");     
+
+
+
+
+
+
+            MapLocal.Add("90-minsk", "Минск");
+
+
+
+
+            MapLocal.Add("95-lost-city-ctf", "Затеряный город");
+
+
+
+            MapLocal.Add("99-poland", "Студзянки");
+
+            MapLocal.Add("101-dday", "Оверлорд");
+
+
+
+            MapLocal.Add("105-germany", "Берлин");
+
+
+
+
+
+
+            MapLocal.Add("112-eiffel-tower-ctf", "Париж");
+
+            MapLocal.Add("114-czech", "Промзона");
+            MapLocal.Add("115-sweden", "Штиль");
+
+            //MapLocal.Add("asia-korea", "Священная долина");
+            //MapLocal.Add("action-stalingrad", "Винтерберг");
+            //MapLocal.Add("ruinberg-winter", "Винтерберг");
+            //MapLocal.Add("prohorovka-defense", "Огненная дуга");
+            //MapLocal.Add("fallout-paris", "Монте-Роза");
 
             MapLocal.Add("208-bf-epic-normandy", "Нормандия");
             MapLocal.Add("209-wg-epic-suburbia", "Крафтверк");
@@ -198,15 +314,20 @@ namespace DamageOnMaps
             ModeLocal.Add("assault_1", "Случайный бой / Штурм");
 
             ModeLocal.Add("ctf_2", "Тренировочный бой");
+            ModeLocal.Add("domination_2", "Тренировочный бой / Встречный");
             ModeLocal.Add("assault2_2", "Тренировочный бой / Штурм");
 
             ModeLocal.Add("ctf30x30_25", "Генеральное сражение");
             ModeLocal.Add("ctf_9", "10 на 10");
+
+            ModeLocal.Add("ctf_20", "Вылазки");
         }
     }
 
     public class ReplayList
     {
+        public static bool CollectReplaysWithoutDamage { get; set; } = false;
+
         public List<ReplayInfo> Replays = new List<ReplayInfo>();
 
         public ReplayList()
@@ -260,6 +381,13 @@ namespace DamageOnMaps
 
         public class ReportInformation : IEnumerable<ModeContainer>
         {
+            public static SortMethod SortBy { get; set; } = SortMethod.AverageDamage;
+            public enum SortMethod
+            {
+                AverageDamage = 1,
+                BattlesCount = 2
+            }
+
             public List<ModeContainer> ModeContainers { get; set; }
             public int BattlesCount => ModeContainers.Sum(x => x.BattlesCount);
             internal ReportInformation(List<ReplayInfo> replays)
@@ -288,17 +416,9 @@ namespace DamageOnMaps
             {
                 ModeName = modename;
                 MapContainers = maps.GroupBy(x => x.Map, (mapname, tank) => new MapContainer(mapname, tank)).ToList();
-                MapContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
-            }
+                if (ReportInformation.SortBy == ReportInformation.SortMethod.AverageDamage) MapContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+                if (ReportInformation.SortBy == ReportInformation.SortMethod.BattlesCount) MapContainers.Sort((x, y) => y.BattlesCount - x.BattlesCount);
 
-            public static int Compare(MapContainer left, MapContainer right)
-            {
-                var leftaverageoverall = left.AverageDamage * left.BattlesCount;
-                var rightaverageoverall = right.AverageDamage * right.BattlesCount;
-                if (leftaverageoverall == rightaverageoverall) return 0;
-                if (leftaverageoverall > rightaverageoverall) return 1;
-                if (leftaverageoverall < rightaverageoverall) return -1;
-                throw new Exception();
             }
 
             public IEnumerator<MapContainer> GetEnumerator()
@@ -331,11 +451,14 @@ namespace DamageOnMaps
                     return (int)(alldamage / (double)battles);
                 }
             }
+
             public MapContainer(string mapname, IEnumerable<ReplayInfo> tanks)
             {
                 MapName = mapname;
                 TanksContainers = tanks.GroupBy(x => x.Tank, (tankname, replays) => new TankContainer(tankname, replays)).ToList();
-                TanksContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+                
+                if (ReportInformation.SortBy == ReportInformation.SortMethod.AverageDamage) TanksContainers.Sort((x, y) => y.AverageDamage - x.AverageDamage);
+                if (ReportInformation.SortBy == ReportInformation.SortMethod.BattlesCount) TanksContainers.Sort((x, y) => y.BattlesCount - x.BattlesCount);
             }
 
             public IEnumerator<TankContainer> GetEnumerator()
@@ -356,11 +479,13 @@ namespace DamageOnMaps
 
             //params:
             public int AverageDamage { get; set; }
+            public double AverageArtys { get; set; }
 
             public TankContainer(string tankname, IEnumerable<ReplayInfo> replays)
             {
                 TankName = tankname;
                 AverageDamage = (int)replays.Average(x => x.Damage);
+                AverageArtys = replays.Average(x => x.Artys);
                 BattlesCount = replays.Count();
             }
         }
@@ -386,18 +511,6 @@ namespace DamageOnMaps
             else return e.JoinIntoString(" ");
         }
 
-        public static int GetAverageDamage(this IGrouping<string, ReplayInfo> replays)
-        {
-            var battles = 0;
-            long overalldamage = 0;
-            foreach (var x in replays)
-            {
-                battles += 1;
-                overalldamage += x.Damage;
-            }
-            return (int)Math.Round((double)overalldamage / battles);
-        }
-
         public static string GetTankName(this ReplayList.TankContainer str)
         {
             var iof = str.TankName.IndexOf("_");
@@ -413,8 +526,29 @@ namespace DamageOnMaps
         {
             Console.Title = "DamageOnMaps by Alexandr Kotov";
             Console.WriteLine("Эта программа создаёт отчёт по сыгранным реплеям");
+            Console.WriteLine("Enter чтобы создать отчёт");
+            Console.WriteLine("W чтобы изменить, читать ли реплеи в которых игрок вышел из боя");
+            Console.WriteLine("S чтобы изменить метод сортировки карт (по среднему урону/по количеству боёв)");
+            while (true)
+            {
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Enter) break;
+                if (key == ConsoleKey.W)
+                {
+                    ReplayList.CollectReplaysWithoutDamage = !ReplayList.CollectReplaysWithoutDamage;
+                    Console.WriteLine($"Учитывание реплеев из которых игрок вышел из боя изменено на {ReplayList.CollectReplaysWithoutDamage}");
+                }
+                if (key == ConsoleKey.S)
+                {
+                    ReplayList.ReportInformation.SortBy++;
+                    if (ReplayList.ReportInformation.SortBy > ReplayList.ReportInformation.SortMethod.BattlesCount) ReplayList.ReportInformation.SortBy = ReplayList.ReportInformation.SortMethod.AverageDamage;
+                    Console.WriteLine($"Сортировка изменена на {ReplayList.ReportInformation.SortBy}");
+                }
+                if (key == ConsoleKey.Escape) return;
+            }
             Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().ManifestModule.FullyQualifiedName);
             var AllReplays = new ReplayList();
+
             if (AllReplays.Replays.Count > 0)
             {
                 var sb = new StringBuilder();
@@ -449,11 +583,11 @@ namespace DamageOnMaps
                     foreach (var map in mode)
                     {
                         sb.AppendLine($"     ---> Карта {map.MapName} ({map.BattlesCount})");
-                        sb.AppendLine($"            │    {"Танк",        -50 } │  Боёв │  Урон");
-                        sb.AppendLine($"          ──┼────{new string('─', 50)}─┼───────┼──────────");
+                        sb.AppendLine($"            │    {"Танк",        -50 } │  Боёв │  Урон  │ Арт ");
+                        sb.AppendLine($"          ──┼────{new string('─', 50)}─┼───────┼────────┼──────");
                         foreach (var tank in map)
                         {
-                            sb.AppendLine($"            │    {tank.GetTankName(), -50} │ {tank.BattlesCount, 5} │ {tank.AverageDamage, 5}");
+                            sb.AppendLine($"            │    {tank.GetTankName(), -50} │ {tank.BattlesCount, 5} │ {tank.AverageDamage, 6} │ {Math.Round(tank.AverageArtys / 2, 3), -4}");
                         }
                         sb.AppendLine($"     <{new string('-', 20)}");
                         sb.AppendLine();

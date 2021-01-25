@@ -4,3 +4,4 @@ obj
 .vs
 *.txt
 *.exe
+!arts.txt
