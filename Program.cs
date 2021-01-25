@@ -21,6 +21,11 @@ namespace DamageOnMaps
         public List<string> Vehicles { get; set; } = new List<string>();
         public int Artys { get; set; }
 
+        public override string ToString()
+        {
+            return $"{Tank.GetTankName()} {OrigMode} {Damage} {Map}";
+        }
+
         public ReplayInfo(string path)
         {
             Time = File.GetLastAccessTime(path);
@@ -69,6 +74,12 @@ namespace DamageOnMaps
         public void ParseFileName(string path)
         {
             var filename = Path.GetFileNameWithoutExtension(path);
+            if (ReplayList.IsLeftDate || ReplayList.IsRightDate)
+            {
+                var date = File.GetLastWriteTime(path).Date;
+                if (ReplayList.IsLeftDate && date < ReplayList.LeftDate) throw new NotImplementedException();
+                if (ReplayList.IsRightDate && date > ReplayList.RightDate) throw new NotImplementedException();
+            }
             var tw = filename.Split(chararray, StringSplitOptions.RemoveEmptyEntries);
             var mapindx = Array.FindLastIndex(tw, x => x.All(y => char.IsDigit(y)));
             Tank = new ArraySegment<string>(tw, 2, mapindx - 2).JoinIntoString("_");
@@ -324,8 +335,42 @@ namespace DamageOnMaps
         }
     }
 
+    public class TankInfo
+    {
+        public enum TankType
+        {
+            Light,
+            Medium,
+            Heavy,
+            Tankdestroyer,
+            Artillery
+        }
+        public enum TankNation
+        {
+            Russia,
+            Germany,
+            America,
+            France,
+            GreatBritain,
+            China,
+            Japan,
+            Czech,
+            Sweden,
+            Poland,
+            Italy,
+        }
+        public string SystemName { get; set; }
+        public int Tier { get; set; }
+        public TankType Type { get; set; }
+        public TankNation Nation { get; set; }
+    }
+
     public class ReplayList
     {
+        public static bool IsLeftDate { get; set; } = false;
+        public static bool IsRightDate { get; set; } = false;
+        public static DateTime LeftDate { get; set; } = DateTime.Now.Date;
+        public static DateTime RightDate { get; set; } = DateTime.Now.Date;
         public static bool CollectReplaysWithoutDamage { get; set; } = false;
 
         public List<ReplayInfo> Replays = new List<ReplayInfo>();
@@ -356,6 +401,7 @@ namespace DamageOnMaps
                     if (ri.IsLegal())
                     {
                         Replays.Add(ri);
+                        Console.WriteLine(ri);
                     }
                     else errors += 1;
                 }
@@ -484,7 +530,9 @@ namespace DamageOnMaps
             public TankContainer(string tankname, IEnumerable<ReplayInfo> replays)
             {
                 TankName = tankname;
-                AverageDamage = (int)replays.Average(x => x.Damage);
+                var reps = replays.Where(x => x.Damage != -1);
+                if (reps.Any()) AverageDamage = (int)reps.Average(x => x.Damage);
+                else AverageDamage = -1;
                 AverageArtys = replays.Average(x => x.Artys);
                 BattlesCount = replays.Count();
             }
@@ -522,17 +570,75 @@ namespace DamageOnMaps
             return str.Substring(iof + 1).Replace("_", " ");
         }
 
+        static void Help()
+        {
+            Console.WriteLine("Эта программа создаёт отчёт по сыгранным реплеям");
+            Console.WriteLine(" │ Enter │ ─ чтобы создать отчёт");
+            Console.WriteLine(" │ W │ ─ изменить, читать ли реплеи в которых игрок вышел из боя");
+            Console.WriteLine(" │ S │ ─ изменить метод сортировки карт (по среднему урону/по количеству боёв)");
+            Console.WriteLine(" │ T │ ─ задать время, от которого считать реплеи");
+            Console.WriteLine(" │ Y │ ─ задать время, до которого считать реплеи");
+            Console.WriteLine(" │ Ctrl+T │ │ Ctrl+Y │ ─ удалить границу времени");
+            Console.WriteLine(" │ P │ ─ показать параметры анализа");
+            Console.WriteLine(" │ H │ ─ снова показать список клавиш");
+            Console.WriteLine();
+        }
+
+        static void TimeHelp()
+        {
+            Console.WriteLine(" │ Enter │ ─ подтвердить");
+            Console.WriteLine(" │ Esc │ ─ отменить");
+            Console.WriteLine(" │ A │ ─ предыдущая дата");
+            Console.WriteLine(" │ D │ ─ следующая дата");
+            Console.WriteLine(" │ Ctrl+A │ │ Ctrl+D │ ─ перескочить на месяц");
+        }
+
+        static void Params()
+        {
+            Console.WriteLine("------------------------------------------");
+            Console.WriteLine("Параметры анализа реплеев:");
+            Console.WriteLine($"Считать реплеи в которых игрок вышел из боя: {ReplayList.CollectReplaysWithoutDamage}");
+            Console.WriteLine($"Метод сортировки карт: {ReplayList.ReportInformation.SortBy}");
+            Console.WriteLine($"Поиск по времени: {(ReplayList.IsLeftDate ? ReplayList.LeftDate.ToShortDateString() : "no")} - {(ReplayList.IsRightDate ? ReplayList.RightDate.ToShortDateString() : "no")}");
+            Console.WriteLine("------------------------------------------");
+        }
+
         static void Main(string[] args)
         {
             Console.Title = "DamageOnMaps by Alexandr Kotov";
-            Console.WriteLine("Эта программа создаёт отчёт по сыгранным реплеям");
-            Console.WriteLine("Enter чтобы создать отчёт");
-            Console.WriteLine("W чтобы изменить, читать ли реплеи в которых игрок вышел из боя");
-            Console.WriteLine("S чтобы изменить метод сортировки карт (по среднему урону/по количеству боёв)");
+            Help();
+            Params();
             while (true)
             {
-                var key = Console.ReadKey(true).Key;
-                if (key == ConsoleKey.Enter) break;
+                var keyinfo = Console.ReadKey(true);
+                var key = keyinfo.Key;
+                if (key == ConsoleKey.Enter)
+                {
+                    Params();
+                    Console.WriteLine("Вы уверены, что хотите проанализировать свои реплеи с этими параметрами?");
+                    Console.WriteLine(" │ Enter │ ─ да");
+                    Console.WriteLine(" │ Escape │ ─ нет");
+                    Console.WriteLine();
+                    var choose = false;
+                    while (true)
+                    {
+                        var keyinfo2 = Console.ReadKey(true);
+                        var key2 = keyinfo2.Key;
+                        if (key2 == ConsoleKey.Escape)
+                        {
+                            choose = false;
+                            break;
+                        }
+                        if (key2 == ConsoleKey.Enter)
+                        {
+                            choose = true;
+                            break;
+                        }
+                    }
+                    if (choose) break;
+                    else Help();
+                }
+                if (key == ConsoleKey.P) Params();
                 if (key == ConsoleKey.W)
                 {
                     ReplayList.CollectReplaysWithoutDamage = !ReplayList.CollectReplaysWithoutDamage;
@@ -543,6 +649,108 @@ namespace DamageOnMaps
                     ReplayList.ReportInformation.SortBy++;
                     if (ReplayList.ReportInformation.SortBy > ReplayList.ReportInformation.SortMethod.BattlesCount) ReplayList.ReportInformation.SortBy = ReplayList.ReportInformation.SortMethod.AverageDamage;
                     Console.WriteLine($"Сортировка изменена на {ReplayList.ReportInformation.SortBy}");
+                }
+                if (key == ConsoleKey.H)
+                {
+                    Help();
+                }
+                if (key == ConsoleKey.T)
+                {
+                    if (keyinfo.Modifiers.HasFlag(ConsoleModifiers.Control))
+                    {
+                        ReplayList.IsLeftDate = false;
+                        Console.WriteLine("Нижняя граница времени удалена");
+                    }
+                    else
+                    {
+                        ReplayList.IsLeftDate = true;
+                        TimeHelp();
+                        Console.WriteLine(ReplayList.LeftDate.ToShortDateString());
+                        while (true)
+                        {
+                            var keyinfo2 = Console.ReadKey(true);
+                            var key2 = keyinfo2.Key;
+                            if (key2 == ConsoleKey.Escape)
+                            {
+                                ReplayList.IsLeftDate = false;
+                                Console.WriteLine("Нижняя граница времени удалена");
+                                break;
+                            }
+                            if (key2 == ConsoleKey.D)
+                            {
+                                if (keyinfo2.Modifiers.HasFlag(ConsoleModifiers.Control)) ReplayList.LeftDate = ReplayList.LeftDate.AddMonths(1);
+                                else ReplayList.LeftDate = ReplayList.LeftDate.AddDays(1);
+                                Console.WriteLine(ReplayList.LeftDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.A)
+                            {
+                                if (keyinfo2.Modifiers.HasFlag(ConsoleModifiers.Control)) ReplayList.LeftDate = ReplayList.LeftDate.AddMonths(-1);
+                                else ReplayList.LeftDate = ReplayList.LeftDate.AddDays(-1);
+                                Console.WriteLine(ReplayList.LeftDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.H)
+                            {
+                                TimeHelp();
+                                Console.WriteLine(ReplayList.LeftDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.Enter)
+                            {
+                                Console.WriteLine($"Нижняя граница времени установлена на {ReplayList.LeftDate.ToShortDateString()}");
+                                Console.WriteLine();
+                                Help();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (key == ConsoleKey.Y)
+                {
+                    if (keyinfo.Modifiers.HasFlag(ConsoleModifiers.Control))
+                    {
+                        ReplayList.IsRightDate = false;
+                        Console.WriteLine("Верхняя граница времени удалена");
+                    }
+                    else
+                    {
+                        ReplayList.IsRightDate = true;
+                        TimeHelp();
+                        Console.WriteLine(ReplayList.RightDate.ToShortDateString());
+                        while (true)
+                        {
+                            var keyinfo2 = Console.ReadKey(true);
+                            var key2 = keyinfo2.Key;
+                            if (key2 == ConsoleKey.Escape)
+                            {
+                                ReplayList.IsRightDate = false;
+                                Console.WriteLine("Верхняя граница времени удалена");
+                                break;
+                            }
+                            if (key2 == ConsoleKey.D)
+                            {
+                                if (keyinfo2.Modifiers.HasFlag(ConsoleModifiers.Control)) ReplayList.RightDate = ReplayList.RightDate.AddMonths(1);
+                                else ReplayList.RightDate = ReplayList.RightDate.AddDays(1);
+                                Console.WriteLine(ReplayList.RightDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.A)
+                            {
+                                if (keyinfo2.Modifiers.HasFlag(ConsoleModifiers.Control)) ReplayList.RightDate = ReplayList.RightDate.AddMonths(-1);
+                                else ReplayList.RightDate = ReplayList.RightDate.AddDays(-1);
+                                Console.WriteLine(ReplayList.RightDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.H)
+                            {
+                                TimeHelp();
+                                Console.WriteLine(ReplayList.RightDate.ToShortDateString());
+                            }
+                            if (key2 == ConsoleKey.Enter)
+                            {
+                                Console.WriteLine($"Верхняя граница времени установлена на {ReplayList.RightDate.ToShortDateString()}");
+                                Console.WriteLine();
+                                Help();
+                                break;
+                            }
+                        }
+                    }
                 }
                 if (key == ConsoleKey.Escape) return;
             }
@@ -555,6 +763,9 @@ namespace DamageOnMaps
                 sb.AppendLine("(c)      DamageOnMaps by Alexandr Kotov 2020");
                 sb.AppendLine();
                 sb.AppendLine("==========   Отчёт  по  реплеям   ==========");
+                sb.AppendLine($"Временной промежуток: {(ReplayList.IsLeftDate ? ReplayList.LeftDate.ToShortDateString() : "no")} - {(ReplayList.IsRightDate ? ReplayList.RightDate.ToShortDateString() : "no")}");
+                sb.AppendLine($"Сортировка карт {ReplayList.ReportInformation.SortBy,28}");
+                if (ReplayList.CollectReplaysWithoutDamage) sb.AppendLine($"Собраны реплеи по покинутым боям");
                 sb.AppendLine("============================================");
                 sb.AppendLine();
 
